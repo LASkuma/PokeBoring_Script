@@ -40,29 +40,29 @@ getLocation(locationString, function(err, result) {
   location.coords.longitude = result.longitude
 
   a.init(username, password, location, provider, function(err) {
+    if (err) throw err
+
+    console.log('1[i] Current location: ' + a.playerInfo.locationName)
+    console.log('1[i] lat/long/alt: : ' + a.playerInfo.latitude + ' ' + a.playerInfo.longitude + ' ' + a.playerInfo.altitude)
+
+    a.GetProfile(function(err, profile) {
       if (err) throw err
 
-      console.log('1[i] Current location: ' + a.playerInfo.locationName)
-      console.log('1[i] lat/long/alt: : ' + a.playerInfo.latitude + ' ' + a.playerInfo.longitude + ' ' + a.playerInfo.altitude)
+      console.log('1[i] Username: ' + profile.username)
+      console.log('1[i] Poke Storage: ' + profile.poke_storage)
+      console.log('1[i] Item Storage: ' + profile.item_storage)
 
-      a.GetProfile(function(err, profile) {
-          if (err) throw err
+      var poke = 0
+      if (profile.currency[0].amount) {
+          poke = profile.currency[0].amount
+      }
 
-          console.log('1[i] Username: ' + profile.username)
-          console.log('1[i] Poke Storage: ' + profile.poke_storage)
-          console.log('1[i] Item Storage: ' + profile.item_storage)
+      console.log('1[i] Pokecoin: ' + poke)
+      console.log('1[i] Stardust: ' + profile.currency[1].amount)
 
-          var poke = 0
-          if (profile.currency[0].amount) {
-              poke = profile.currency[0].amount
-          }
+      a.Heartbeat(function(err,hb) {})
 
-          console.log('1[i] Pokecoin: ' + poke)
-          console.log('1[i] Stardust: ' + profile.currency[1].amount)
-
-          a.Heartbeat(function(err,hb) {})
-
-          callMyself(a)()
+      callMyself(a)()
 
       })
   })
@@ -152,7 +152,7 @@ function walkAndCatch(target, me, cb) {
               console.log(xsuc)
             }
             console.log(xdat)
-            if (typeof xdat !== 'undefined' && xdat.Status === null) {
+            if (xdat !== null && xdat !== undefined && xdat.Status === null) {
               caught[target.encounter_id] = true
             }
   					// var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch']
