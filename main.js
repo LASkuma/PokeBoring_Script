@@ -152,7 +152,7 @@ function walkAndCatch(target, me, cb) {
               console.log(xsuc)
             }
             console.log(xdat)
-            if (typeof xdat !== undefined && xdat.Status === null) {
+            if (typeof xdat !== 'undefined' && xdat.Status === null) {
               caught[target.encounter_id] = true
             }
   					// var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch']
