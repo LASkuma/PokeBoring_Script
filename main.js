@@ -108,33 +108,37 @@ function sortTargetsByDistance(targets, lat, lng) {
   return targets.sort(compare)
 }
 
-function walkAndCatch(target, me, cb) {
-  var distance = target.distance
-  while (distance > 0.01) {
-    console.log('pump')
-    moveTowardsTarget(target, me, distance)
-    me.Heartbeat(function(err) {
-      if (err) {
-        console.log(err)
-      }
-    })
-    distance = getDistanceFromLatLonInKm(target.latitude, target.longitude, me.playerInfo.latitude, me.playerInfo.longitude)
-    sleep.sleep(1)
-  }
-  console.log(distance)
-  console.log('My location: %s, %s', me.playerInfo.latitude, me.playerInfo.longitude)
-  console.log('Target location: %s, %s', target.latitude, target.longitude)
+function walkToTarget(latitude, longitude, me, cb) {
+  moveTowardsTarget(latitude, longitude, me)
+  me.Heartbeat(function(err) {
+    if (err) {
+      console.log('ERR: %s', err)
+    }
 
+    console.log('[Getting closer] My location: %s, %s', me.playerInfo.latitude, me.playerInfo.longitude)
+    var distance = distanceBetweenCoordsAndMe(latitude, longitude, me)
+    console.log('Distance to target: %sm', distance * 1000)
+    if (distance > 0.01) {
+      setTimeout(function() {
+        walkToTarget(latitude, longitude, me, cb)
+      }, 1000)
+    } else {
+      cb()
+    }
+  })
+}
+
+function catchPokemonsAtCurrentLocation (target, me, cb) {
   me.Heartbeat(function(err,hb) {
-		if(err !== null) {
-			console.log('There appeared to be an error...')
-		} else {
+    if(err !== null) {
+      console.log('There appeared to be an error...')
+    } else {
       var found = false
       var currentPokemon
-			for (var i = hb.cells.length - 1; i >= 0; i--) {
-				if(hb.cells[i].WildPokemon[0]) {
-					for (var x = hb.cells[i].WildPokemon.length - 1; x >= 0; x--) {
-						currentPokemon = hb.cells[i].WildPokemon[x]
+      for (var i = hb.cells.length - 1; i >= 0; i--) {
+        if(hb.cells[i].WildPokemon[0]) {
+          for (var x = hb.cells[i].WildPokemon.length - 1; x >= 0; x--) {
+            currentPokemon = hb.cells[i].WildPokemon[x]
             var pokeid = parseInt(currentPokemon.pokemon.PokemonId)
             // Filter here, modify it
             if (pokeid === 147) {
@@ -148,10 +152,10 @@ function walkAndCatch(target, me, cb) {
         }
       }
       if (found) {
-  			var iPokedex = me.pokemonlist[parseInt(currentPokemon.pokemon.PokemonId)-1]
-  			me.EncounterPokemon(currentPokemon, function(suc, dat) {
-  				console.log('Encountering pokemon ' + iPokedex.name + '...')
-  				me.CatchPokemon(currentPokemon, 1, 1.950, 1, pokeballType, function(xsuc, xdat) {
+        var iPokedex = me.pokemonlist[parseInt(currentPokemon.pokemon.PokemonId)-1]
+        me.EncounterPokemon(currentPokemon, function(suc, dat) {
+          console.log('Encountering pokemon ' + iPokedex.name + '...')
+          me.CatchPokemon(currentPokemon, 1, 1.950, 1, pokeballType, function(xsuc, xdat) {
             if (xsuc) {
               console.log('ERR:')
               console.log(xsuc)
@@ -160,28 +164,33 @@ function walkAndCatch(target, me, cb) {
             if (xdat !== null && xdat !== undefined && xdat.Status === null) {
               caught[target.encounter_id] = true
             }
-  					// var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch']
-  					// console.log(status[xdat.Status])
+            // var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch']
+            // console.log(status[xdat.Status])
             cb()
-  				})
-  			})
+          })
+        })
       } else {
         caught[target.encounter_id] = true
         cb()
       }
-			// console.log(util.inspect(hb, showHidden=false, depth=10, colorize=true))
-		}
+      // console.log(util.inspect(hb, showHidden=false, depth=10, colorize=true))
+    }
   })
 }
 
-function moveTowardsTarget(target, me, distance) {
+function walkAndCatch(target, me, cb) {
+  console.log('Target location: %s, %s', target.latitude, target.longitude)
+  walkToTarget(target.latitude, target.longitude, me, function() {
+    catchPokemonsAtCurrentLocation(target, me, cb)
+  })
+}
+
+function moveTowardsTarget(latitude, longitude, me) {
+  var distance = getDistanceFromLatLonInKm(latitude, longitude, me.playerInfo.latitude, me.playerInfo.longitude)
   var numOfIntervals = distance / walkingSpeed
-  if (numOfIntervals < 1) {
-    me.playerInfo.latitude = target.latitude
-    me.playerInfo.longitude = target.longitude
-  } else {
-    var dLat = target.latitude - me.playerInfo.latitude
-    var dLng = target.longitude - me.playerInfo.longitude
+  if (numOfIntervals > 1) {
+    var dLat = latitude - me.playerInfo.latitude
+    var dLng = longitude - me.playerInfo.longitude
     dLat /= numOfIntervals
     dLng /= numOfIntervals
     me.playerInfo.latitude += dLat
@@ -228,6 +237,9 @@ function callMyself (me) {
 }
 
 // Helper functions
+function distanceBetweenCoordsAndMe(lat, lon, me) {
+  return getDistanceFromLatLonInKm(lat, lon, me.playerInfo.latitude, me.playerInfo.longitude)
+}
 function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
   var R = 6371 // Radius of the earth in km
   var dLat = deg2rad(lat2-lat1)  // deg2rad below
