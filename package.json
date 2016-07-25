@@ -1,0 +1,26 @@
+{
+  "name": "poke-boring-script",
+  "version": "0.1.0",
+  "description": "Make your game more boring",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LASkuma/PokeBoring_Script.git"
+  },
+  "author": "LASkuma",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/LASkuma/PokeBoring_Script/issues"
+  },
+  "homepage": "https://github.com/LASkuma/PokeBoring_Script#readme",
+  "dependencies": {
+    "minimist": "^1.2.0",
+    "node-geocoder": "^3.13.1",
+    "pokemon-go-node-api": "git+https://github.com/LASkuma/Pokemon-GO-node-api.git",
+    "request": "^2.74.0",
+    "sleep": "^3.0.1"
+  }
+}
