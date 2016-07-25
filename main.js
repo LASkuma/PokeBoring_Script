@@ -22,10 +22,13 @@ var credentials = JSON.parse(contents)
 var username = credentials.username
 var password = credentials.password
 var provider = credentials.provider
-var walkingSpeed = 0.05
+var walkingSpeed = 0.01
 var caught = {}
 
 var argv = minimist(process.argv.slice(2))
+var pokeballType = argv.b || 1
+console.log(pokeballType)
+
 if (typeof(argv.l) !== "string") {
   console.log("Location must be provided after -l flag")
   process.exit(1)
@@ -111,10 +114,12 @@ function walkAndCatch(target, me, cb) {
     console.log('pump')
     moveTowardsTarget(target, me, distance)
     me.Heartbeat(function(err) {
-      console.log(err)
+      if (err) {
+        console.log(err)
+      }
     })
     distance = getDistanceFromLatLonInKm(target.latitude, target.longitude, me.playerInfo.latitude, me.playerInfo.longitude)
-    sleep.sleep(5)
+    sleep.sleep(1)
   }
   console.log(distance)
   console.log('My location: %s, %s', me.playerInfo.latitude, me.playerInfo.longitude)
@@ -146,7 +151,7 @@ function walkAndCatch(target, me, cb) {
   			var iPokedex = me.pokemonlist[parseInt(currentPokemon.pokemon.PokemonId)-1]
   			me.EncounterPokemon(currentPokemon, function(suc, dat) {
   				console.log('Encountering pokemon ' + iPokedex.name + '...')
-  				me.CatchPokemon(currentPokemon, 1, 1.950, 1, 1, function(xsuc, xdat) {
+  				me.CatchPokemon(currentPokemon, 1, 1.950, 1, pokeballType, function(xsuc, xdat) {
             if (xsuc) {
               console.log('ERR:')
               console.log(xsuc)
