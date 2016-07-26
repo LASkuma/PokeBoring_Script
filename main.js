@@ -24,10 +24,12 @@ var password = credentials.password
 var provider = credentials.provider
 var walkingSpeed = 0.01
 var caught = {}
+var fortTime = {}
 
 var argv = minimist(process.argv.slice(2))
 var pokeballType = argv.b || 1
-console.log(pokeballType)
+var ballNames = ["Poke Ball", "Great Ball", "Ultra ball"]
+console.log("Using %s", ballNames[pokeballType - 1])
 
 if (typeof(argv.l) !== "string") {
   console.log("Location must be provided after -l flag")
@@ -63,15 +65,60 @@ getLocation(locationString, function(err, result) {
       console.log('1[i] Pokecoin: ' + poke)
       console.log('1[i] Stardust: ' + profile.currency[1].amount)
 
-      a.Heartbeat(function(err,hb) {})
-
-      callMyself(a)()
-
+      a.Heartbeat(function(err,hb) {
+        callMyself(a)()
       })
+    })
   })
 })
 
+function getPokestops (cb) {
+  request('http://localhost:5000/raw_data?pokestops=true', function(err, response, body) {
+    if (err) {
+      cb(err, null)
+    }
+    var pokestops = JSON.parse(body).pokestops
+    cb(null, pokestops)
+  })
+}
 
+function huntPokestops (me, until) {
+  getPokestops(function (err, pokestops) {
+    if (err) {
+      console.log(err)
+    }
+    _huntPokestops(pokestops, me, until)
+  })
+}
+
+function _huntPokestops (pokestops, me, until) {
+  pokestops = filterCoolDownStops(pokestops)
+  var target = nextTarget(pokestops, me)
+  var now = new Date().getTime()
+  if (target === undefined) {
+    setTimeout(callMyself(me), until - now)
+  } else {
+    walkAndSpinPokestop(target, me, function() {
+      if (now < until) {
+        console.log('Continue hunting pokestops, %s seconds remaining', (until - now) / 1000)
+        _huntPokestops(pokestops, me, until)
+      } else {
+        callMyself(me)()
+      }
+    })
+  }
+}
+
+function filterCoolDownStops (pokestops) {
+  var now = new Date().getTime()
+  return pokestops.filter(function (stop) {
+    var lastTime = fortTime[stop.pokestop_id]
+    if (lastTime === undefined || now > lastTime + 300 * 1000) {
+      return true
+    }
+    return false
+  })
+}
 
 function getTargets (cb) {
   request('http://localhost:5000/raw_data', function(err, response, body) {
@@ -162,7 +209,10 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
             }
             console.log(xdat)
             if (xdat !== null && xdat !== undefined && xdat.Status === null) {
+              // No more balls
               caught[target.encounter_id] = true
+              var until = new Date().getTime() + 300 * 1000
+              huntPokestops(me, until)
             }
             // var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch']
             // console.log(status[xdat.Status])
@@ -175,6 +225,36 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
       }
       // console.log(util.inspect(hb, showHidden=false, depth=10, colorize=true))
     }
+  })
+}
+
+function walkAndSpinPokestop(pokestop, me, cb) {
+  console.log('Stop location: %s, %s', pokestop.latitude, pokestop.longitude)
+  walkToTarget(pokestop.latitude, pokestop.longitude, me, function() {
+    spinPokestop(pokestop, me, cb)
+  })
+}
+
+function spinPokestop(pokestop, me, cb) {
+  me.GetFort(pokestop.pokestop_id, pokestop.latitude, pokestop.longitude, function(err, response) {
+    if (err) {
+      console.log(err)
+    }
+    if (response.result === 3 || response.result === 1) {
+      fortTime[pokestop.pokestop_id] = new Date().getTime()
+    }
+    response.items_awarded.forEach(function(item) {
+      if (item.item_id === 1) {
+        console.log('Get one Pokeball')
+      } else if (item.item_id === 2) {
+        console.log('Get one Great Ball')
+      } else if (item.item_id === 3) {
+        console.log('Get one Ultra Ball')
+      } else if (item.item_id === 4) {
+        console.log('Get one Master Ball')
+      }
+    })
+    cb()
   })
 }
 
@@ -228,9 +308,9 @@ function callMyself (me) {
           })
         })
       } else {
-        console.log('NO MORE')
-        sleep.sleep(300)
-        callMyself(me)()
+        console.log('NO MORE, start hunting pokestops')
+        var until = new Date().getTime() + 300 * 1000
+        huntPokestops(me, until)
       }
     })
   }
