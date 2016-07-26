@@ -25,6 +25,37 @@ var provider = credentials.provider
 var walkingSpeed = 0.01
 var caught = {}
 var fortTime = {}
+var pokemonFilter = {
+  1: true,
+  2: true,
+  3: true,
+  4: true,
+  5: true,
+  6: true,
+  7: true,
+  8: true,
+  9: true,
+  25: true,
+  26: true,
+  63: true,
+  64: true,
+  65: true,
+  92: true,
+  93: true,
+  94: true,
+  102: true,
+  103: true,
+  131: true,
+  137: true,
+  138: true,
+  139: true,
+  140: true,
+  141: true,
+  143: true,
+  147: true,
+  148: true,
+  149: true
+}
 
 var argv = minimist(process.argv.slice(2))
 var pokeballType = argv.b || 1
@@ -124,7 +155,7 @@ function getTargets (cb) {
   request('http://localhost:5000/raw_data', function(err, response, body) {
     var pokemons = JSON.parse(body).pokemons
     var targets = pokemons.filter(function(pokemon) {
-      if (pokemon.pokemon_id !== 147) {
+      if (pokemonFilter[pokemon.pokemon_id] === undefined) {
         return false
       }
       var now = new Date().getTime()
@@ -160,6 +191,19 @@ function walkToTarget(latitude, longitude, me, cb) {
   me.Heartbeat(function(err) {
     if (err) {
       console.log('ERR: %s', err)
+      var currentLocation = {
+          type: 'coords',
+          coords: {
+            latitude: me.playerInfo.latitude,
+            longitude: me.playerInfo.longitude
+          }
+      }
+      me.init(username, password, currentLocation, provider, function(err) {
+          me.GetProfile(function(err, profile) {
+            walkToTarget(latitude, longitude, me, cb)
+          })
+      })
+      return
     }
 
     console.log('[Getting closer] My location: %s, %s', me.playerInfo.latitude, me.playerInfo.longitude)
@@ -187,8 +231,9 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
           for (var x = hb.cells[i].WildPokemon.length - 1; x >= 0; x--) {
             currentPokemon = hb.cells[i].WildPokemon[x]
             var pokeid = parseInt(currentPokemon.pokemon.PokemonId)
+            console.log("Nearby is %s", pokeid)
             // Filter here, modify it
-            if (pokeid === 147) {
+            if (pokemonFilter[pokeid] !== undefined) {
               found = true
               break;
             }
@@ -213,6 +258,7 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
               caught[target.encounter_id] = true
               var until = new Date().getTime() + 300 * 1000
               huntPokestops(me, until)
+              return
             }
             // var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch']
             // console.log(status[xdat.Status])
@@ -283,7 +329,7 @@ function callMyself (me) {
     getTargets(function (err, targets) {
       var target = nextTarget(targets, me)
       if (typeof target !== 'undefined') {
-        console.log('Found One, Preparing')
+        console.log('Found One, Preparing: %s', target.pokemon_id)
 
         var currentLocation = {
             type: 'coords',
