@@ -13,6 +13,10 @@ Currently, it would only catch dratini, you can modify the code to make it catch
   4. run my script with `node main.js -l "location"`. You should use the same location string which you provided to [AHAAAAAAA/PokemonGo-Map](https://github.com/AHAAAAAAA/PokemonGo-Map)
   5. Enjoy
 
+## Parameters
+  1. -t would turn on transferLowIVPokemons when pokemon storage is full. It would transfer all of the pokemons that have IV sum less than 30 and is not your favorite.
+  2. -b [1 or 2] would set your pokeball type. 1 uses pokeball, 2 uses greatball. If 2 is provided, script would automatically delete normal pokeballs when inventory is full.
+
 ## Notice
 Due to some unknown protobuf issue, this script would print out some exceptions. Don't worry, that just means you caught that pokemon! Congratulations!
 

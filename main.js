@@ -9,7 +9,6 @@ var minimist = require('minimist')
 
 // using var so you can login with multiple users
 var a = new PokemonGO.Pokeio()
-
 //Set environment variables or replace placeholder text
 var location = {
     type: 'coords',
@@ -59,6 +58,7 @@ var pokemonFilter = {
 
 var argv = minimist(process.argv.slice(2))
 var pokeballType = argv.b || 1
+var pokeballFlag = argv.b || 1
 var ballNames = ["Poke Ball", "Great Ball", "Ultra ball"]
 console.log("Using %s", ballNames[pokeballType - 1])
 
@@ -98,6 +98,11 @@ getLocation(locationString, function(err, result) {
 
       a.Heartbeat(function(err,hb) {
         callMyself(a)()
+        // var until = new Date().getTime() + 300 * 1000
+        // huntPokestops(a, until)
+        // dropInventoryItems(a, function (err, num) {
+        //   console.log(num)
+        // })
       })
     })
   })
@@ -125,11 +130,16 @@ function huntPokestops (me, until) {
 function _huntPokestops (pokestops, me, until) {
   pokestops = filterCoolDownStops(pokestops)
   var target = nextTarget(pokestops, me)
-  var now = new Date().getTime()
   if (target === undefined) {
+    var now = new Date().getTime()
     setTimeout(callMyself(me), until - now)
   } else {
-    walkAndSpinPokestop(target, me, function() {
+    walkAndSpinPokestop(target, me, function(err, dropped) {
+      var now = new Date().getTime()
+      if (dropped === 0) {
+        setTimeout(callMyself(me), until - now)
+        return
+      }
       if (now < until) {
         console.log('Continue hunting pokestops, %s seconds remaining', (until - now) / 1000)
         _huntPokestops(pokestops, me, until)
@@ -223,54 +233,93 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
   me.Heartbeat(function(err,hb) {
     if(err !== null) {
       console.log('There appeared to be an error...')
-    } else {
-      var found = false
-      var currentPokemon
-      for (var i = hb.cells.length - 1; i >= 0; i--) {
-        if(hb.cells[i].WildPokemon[0]) {
-          for (var x = hb.cells[i].WildPokemon.length - 1; x >= 0; x--) {
-            currentPokemon = hb.cells[i].WildPokemon[x]
-            var pokeid = parseInt(currentPokemon.pokemon.PokemonId)
-            console.log("Nearby is %s", pokeid)
-            // Filter here, modify it
-            if (pokemonFilter[pokeid] !== undefined) {
-              found = true
-              break;
-            }
+    }
+    var found = false
+    var currentPokemon
+    for (var i = hb.cells.length - 1; i >= 0; i--) {
+      if(hb.cells[i].WildPokemon[0]) {
+        for (var x = hb.cells[i].WildPokemon.length - 1; x >= 0; x--) {
+          currentPokemon = hb.cells[i].WildPokemon[x]
+          var pokeid = parseInt(currentPokemon.pokemon.PokemonId)
+          console.log("Nearby is %s", pokeid)
+          // Filter here, modify it
+          if (pokemonFilter[pokeid] !== undefined) {
+            found = true
+            break;
           }
-        }
-        if (found) {
-          break;
         }
       }
       if (found) {
-        var iPokedex = me.pokemonlist[parseInt(currentPokemon.pokemon.PokemonId)-1]
-        me.EncounterPokemon(currentPokemon, function(suc, dat) {
-          console.log('Encountering pokemon ' + iPokedex.name + '...')
-          me.CatchPokemon(currentPokemon, 1, 1.950, 1, pokeballType, function(xsuc, xdat) {
-            if (xsuc) {
-              console.log('ERR:')
-              console.log(xsuc)
-            }
-            console.log(xdat)
-            if (xdat !== null && xdat !== undefined && xdat.Status === null) {
-              // No more balls
-              caught[target.encounter_id] = true
-              var until = new Date().getTime() + 300 * 1000
-              huntPokestops(me, until)
-              return
-            }
-            // var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch']
-            // console.log(status[xdat.Status])
-            cb()
-          })
-        })
-      } else {
-        caught[target.encounter_id] = true
-        cb()
+        break;
       }
-      // console.log(util.inspect(hb, showHidden=false, depth=10, colorize=true))
     }
+    if (found) {
+      var iPokedex = me.pokemonlist[parseInt(currentPokemon.pokemon.PokemonId)-1]
+      me.EncounterPokemon(currentPokemon, function(suc, dat) {
+        console.log('Encountering pokemon ' + iPokedex.name + '...')
+        me.CatchPokemon(currentPokemon, 1, 1.950, 1, pokeballType, function(xsuc, xdat) {
+          if (xsuc) {
+            console.log('ERR:')
+            console.log(xsuc)
+          }
+          console.log(xdat)
+          if (xdat !== null && xdat !== undefined && xdat.Status === null) {
+            // No more balls or pokemon storage is full
+            // If no pokeball, switch to great ball
+            // If all no.... drop items and huntpokestops
+            // If has ball, pokemon storage is full, transfer low IV pokemons if -t is provided as arg
+            getItemList(me, function (err, itemList) {
+              var numPokeball = 0
+              var numGreatball = 0
+              itemList.forEach(function (item) {
+                if (item.item === 1) {
+                  numPokeball = nullToZero(item.count)
+                } else if (item.item === 2) {
+                  numGreatball = nullToZero(item.count)
+                }
+              })
+              console.log('POKE: %s, GREAT: %s', numPokeball, numGreatball)
+              if (pokeballFlag === 1) {
+                numPokeball = 0
+              }
+              if (numPokeball === 0 && numGreatball === 0) {
+                dropInventoryItems(me, function (err) {
+                  if (err) {
+                    console.log('DROP INV ERR: %s', err)
+                  }
+                  var until = new Date().getTime() + 120 * 1000
+                  huntPokestops(me, until)
+                  return
+                })
+              } else if ((numPokeball > 0 && numGreatball > 0) || (numGreatball > 0 && pokeballFlag === 2)) {
+                if (argv.t) {
+                  transferLowIVPokemons(me, function (err) {
+                    if (err) {
+                      console.log('TRNASFER ERR: %s', err)
+                    }
+                    cb()
+                  })
+                  return
+                }
+              } else if (numPokeball === 0 && numGreatball > 0) {
+                pokeballType = 2
+                console.log('No more pokeballs, using great ball')
+              } else if (numGreatball === 0 && numPokeball > 0) {
+                pokeballType = 1
+                console.log('No more greatballs, using pokeball')
+              }
+            })
+          }
+          // var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch']
+          // console.log(status[xdat.Status])
+          cb()
+        })
+      })
+    } else {
+      caught[target.encounter_id] = true
+      cb()
+    }
+    // console.log(util.inspect(hb, showHidden=false, depth=10, colorize=true))
   })
 }
 
@@ -286,8 +335,14 @@ function spinPokestop(pokestop, me, cb) {
     if (err) {
       console.log(err)
     }
-    if (response.result === 3 || response.result === 1) {
+    if (response.result === 3 || response.result === 1 || response.result === null) {
       fortTime[pokestop.pokestop_id] = new Date().getTime()
+    }
+    if (response.result === 4) {
+      me.dropInventoryItems(me, function (err, dropped) {
+        cb(null, dropped)
+      })
+      return
     }
     response.items_awarded.forEach(function(item) {
       if (item.item_id === 1) {
@@ -355,7 +410,7 @@ function callMyself (me) {
         })
       } else {
         console.log('NO MORE, start hunting pokestops')
-        var until = new Date().getTime() + 300 * 1000
+        var until = new Date().getTime() + 120 * 1000
         huntPokestops(me, until)
       }
     })
@@ -416,4 +471,129 @@ function getLocation(locationString, cb) {
       cb(null, result)
     })
   }
+}
+
+function getItemList (me, cb) {
+  me.GetInventory(function (err, inv) {
+    if (err) {
+      cb(err, null)
+    }
+    var itemList = inv.inventory_delta.inventory_items.filter(function (element) {
+      var item = element.inventory_item_data.item
+      if (item !== null) {
+        return true
+      }
+      return false
+    }).map(function (element) {
+      return element.inventory_item_data.item
+    })
+    cb(null, itemList)
+  })
+}
+
+function dropInventoryItems (me, cb) {
+  getItemList(me, function (err, itemList) {
+    if (err) {
+      cb(err, null)
+      console.log("INVENTORY ERR: %s", err)
+    }
+    dropItems(me, itemList, 0, cb)
+  })
+}
+
+function dropItems (me, list, dropped, cb) {
+  var item = list.pop()
+  var dropNum = 0
+  if (item !== undefined) {
+    switch (item.item) {
+      case 1:
+        if (pokeballFlag === 2) {
+          dropNum = item.count
+        }
+        break
+      case 101:
+      case 102:
+        dropNum = item.count
+        break
+      case 103:
+        dropNum = item.count - 20
+        break
+      case 201:
+        dropNum = item.count - 10
+        break
+      case 701:
+        dropNum = item.count - 30
+        break
+      default:
+        dropItems(me, list, dropped, cb)
+        return
+    }
+
+    if (dropNum !== null) {
+      me.DropItem(item.item, dropNum, function (err, result) {
+        if (err) {
+          console.log('Drop ERR: %s', err)
+        }
+        console.log('drop complete')
+        console.log(result)
+        setTimeout(function() {
+          dropItems(me, list, dropped + dropNum, cb)
+        }, 500)
+      })
+    } else {
+      dropItems(me, list, dropped, cb)
+    }
+  } else {
+    cb(null, dropped)
+  }
+}
+
+function transferLowIVPokemons (me, cb) {
+  me.GetInventory(function (err, inv) {
+    if (err) {
+      console.log('Get INV ERR: %s', err)
+    }
+    var pokemonList = inv.inventory_delta.inventory_items.filter(function (element) {
+      var pokemon = element.inventory_item_data.pokemon
+      if (pokemon !== null && pokemon.pokemon_id !== null) {
+        var indAttack = nullToZero(pokemon.individual_attack)
+        var indDefense = nullToZero(pokemon.individual_defense)
+        var indStamina = nullToZero(pokemon.individual_stamina)
+        if (indAttack + indDefense + indStamina < 30 && pokemon.favorite === null) {
+          return true
+        }
+      }
+      return false
+    }).map(function (element) {
+      var pokemon = element.inventory_item_data.pokemon
+      return pokemon.id
+    })
+    transferPokemon(me, pokemonList, cb)
+  })
+}
+
+function transferPokemon (me, list, cb) {
+  var id = list.pop()
+  if (id !== undefined) {
+    me.TransferPokemon(id, function (err, result) {
+      if (err) {
+        cb(err, null)
+        console.log('Transfer ERR: %s', err)
+      }
+      console.log('Transfer complete')
+      console.log(result)
+      setTimeout(function() {
+        transferPokemon(me, list, cb)
+      }, 500)
+    })
+  } else {
+    cb()
+  }
+}
+
+const nullToZero = (object) => {
+  if (object === null) {
+    return 0
+  }
+  return object
 }
