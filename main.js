@@ -103,6 +103,13 @@ getLocation(locationString, function(err, result) {
         // dropInventoryItems(a, function (err, num) {
         //   console.log(num)
         // })
+        
+        // transferLowIVPokemons(a, function(err) {
+        //   if (err) {
+        //     console.log(err)
+        //   }
+        //   console.log('hello')
+        // })
       })
     })
   })
@@ -279,9 +286,6 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
                 }
               })
               console.log('POKE: %s, GREAT: %s', numPokeball, numGreatball)
-              if (pokeballFlag === 1) {
-                numPokeball = 0
-              }
               if (numPokeball === 0 && numGreatball === 0) {
                 dropInventoryItems(me, function (err) {
                   if (err) {
@@ -291,22 +295,46 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
                   huntPokestops(me, until)
                   return
                 })
-              } else if ((numPokeball > 0 && numGreatball > 0) || (numGreatball > 0 && pokeballFlag === 2)) {
-                if (argv.t) {
-                  transferLowIVPokemons(me, function (err) {
-                    if (err) {
-                      console.log('TRNASFER ERR: %s', err)
-                    }
-                    cb()
-                  })
-                  return
+              }
+              if (pokeballFlag === 1) {
+                if (pokeballType === 1 && numPokeball > 0 || pokeballType === 2 && numGreatball > 0) {
+                  if (argv.t) {
+                    transferLowIVPokemons(me, function (err) {
+                      if (err) {
+                        console.log('TRNASFER ERR: %s', err)
+                      }
+                      cb()
+                    })
+                    return
+                  }
+                } else if (numPokeball === 0 && numGreatball > 0) {
+                  pokeballType = 2
+                  console.log('No more pokeballs, using great ball')
+                } else if (numGreatball === 0 && numPokeball > 0) {
+                  pokeballType = 1
+                  console.log('No more greatballs, using pokeball')
                 }
-              } else if (numPokeball === 0 && numGreatball > 0) {
-                pokeballType = 2
-                console.log('No more pokeballs, using great ball')
-              } else if (numGreatball === 0 && numPokeball > 0) {
-                pokeballType = 1
-                console.log('No more greatballs, using pokeball')
+              } else if (pokeballFlag === 2) {
+                if (numGreatball === 0) {
+                  dropInventoryItems(me, function (err) {
+                    if (err) {
+                      console.log('DROP INV ERR: %s', err)
+                    }
+                    var until = new Date().getTime() + 120 * 1000
+                    huntPokestops(me, until)
+                    return
+                  })
+                } else {
+                  if (argv.t) {
+                    transferLowIVPokemons(me, function (err) {
+                      if (err) {
+                        console.log('TRNASFER ERR: %s', err)
+                      }
+                      cb()
+                    })
+                    return
+                  }
+                }
               }
             })
           }
@@ -556,11 +584,15 @@ function transferLowIVPokemons (me, cb) {
     var pokemonList = inv.inventory_delta.inventory_items.filter(function (element) {
       var pokemon = element.inventory_item_data.pokemon
       if (pokemon !== null && pokemon.pokemon_id !== null) {
-        var indAttack = nullToZero(pokemon.individual_attack)
-        var indDefense = nullToZero(pokemon.individual_defense)
-        var indStamina = nullToZero(pokemon.individual_stamina)
-        if (indAttack + indDefense + indStamina < 30 && pokemon.favorite === null) {
-          return true
+        if (pokemon.id === undefined) {
+          console.log(pokemon)
+        } else {
+          var indAttack = nullToZero(pokemon.individual_attack)
+          var indDefense = nullToZero(pokemon.individual_defense)
+          var indStamina = nullToZero(pokemon.individual_stamina)
+          if (indAttack + indDefense + indStamina < 30 && pokemon.favorite === null) {
+            return true
+          }
         }
       }
       return false
@@ -586,7 +618,9 @@ function transferPokemon (me, list, cb) {
         transferPokemon(me, list, cb)
       }, 500)
     })
-  } else {
+  }
+  if (id === undefined && list.length === 0){
+    console.log(id)
     cb()
   }
 }
