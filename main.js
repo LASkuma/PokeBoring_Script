@@ -339,7 +339,7 @@ function spinPokestop(pokestop, me, cb) {
       fortTime[pokestop.pokestop_id] = new Date().getTime()
     }
     if (response.result === 4) {
-      me.dropInventoryItems(me, function (err, dropped) {
+      dropInventoryItems(me, function (err, dropped) {
         cb(null, dropped)
       })
       return
