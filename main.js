@@ -36,9 +36,17 @@ var pokemonFilter = {
   9: true,
   25: true,
   26: true,
+  58: true,
+  59: true,
   63: true,
   64: true,
   65: true,
+  66: true,
+  67: true,
+  68: true,
+  74: true,
+  75: true,
+  76: true,
   92: true,
   93: true,
   94: true,
@@ -103,7 +111,7 @@ getLocation(locationString, function(err, result) {
         // dropInventoryItems(a, function (err, num) {
         //   console.log(num)
         // })
-        
+
         // transferLowIVPokemons(a, function(err) {
         //   if (err) {
         //     console.log(err)
@@ -141,9 +149,9 @@ function _huntPokestops (pokestops, me, until) {
     var now = new Date().getTime()
     setTimeout(callMyself(me), until - now)
   } else {
-    walkAndSpinPokestop(target, me, function(err, dropped) {
+    walkAndSpinPokestop(target, me, function(err, shouldRest) {
       var now = new Date().getTime()
-      if (dropped === 0) {
+      if (shouldRest) {
         setTimeout(callMyself(me), until - now)
         return
       }
@@ -270,77 +278,82 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
             console.log(xsuc)
           }
           console.log(xdat)
-          if (xdat !== null && xdat !== undefined && xdat.Status === null) {
-            // No more balls or pokemon storage is full
-            // If no pokeball, switch to great ball
-            // If all no.... drop items and huntpokestops
-            // If has ball, pokemon storage is full, transfer low IV pokemons if -t is provided as arg
-            getItemList(me, function (err, itemList) {
-              var numPokeball = 0
-              var numGreatball = 0
-              itemList.forEach(function (item) {
-                if (item.item === 1) {
-                  numPokeball = nullToZero(item.count)
-                } else if (item.item === 2) {
-                  numGreatball = nullToZero(item.count)
-                }
-              })
-              console.log('POKE: %s, GREAT: %s', numPokeball, numGreatball)
-              if (numPokeball === 0 && numGreatball === 0) {
-                dropInventoryItems(me, function (err) {
-                  if (err) {
-                    console.log('DROP INV ERR: %s', err)
-                  }
-                  var until = new Date().getTime() + 120 * 1000
-                  huntPokestops(me, until)
-                  return
-                })
-              }
-              if (pokeballFlag === 1) {
-                if (pokeballType === 1 && numPokeball > 0 || pokeballType === 2 && numGreatball > 0) {
-                  if (argv.t) {
-                    transferLowIVPokemons(me, function (err) {
-                      if (err) {
-                        console.log('TRNASFER ERR: %s', err)
-                      }
-                      cb()
-                    })
-                    return
-                  }
-                } else if (numPokeball === 0 && numGreatball > 0) {
-                  pokeballType = 2
-                  console.log('No more pokeballs, using great ball')
-                } else if (numGreatball === 0 && numPokeball > 0) {
-                  pokeballType = 1
-                  console.log('No more greatballs, using pokeball')
-                }
-              } else if (pokeballFlag === 2) {
-                if (numGreatball === 0) {
-                  dropInventoryItems(me, function (err) {
+
+          if (xdat) {
+            if (xdat.Status === null) {
+              // No more balls or pokemon storage is full
+              // If no pokeball, switch to great ball
+              // If all no.... drop items and huntpokestops
+              // If has ball, pokemon storage is full, transfer low IV pokemons if -t is provided as arg
+              getItemList(me, function (err, itemList) {
+                if (err) {
+                  console.log(err)
+                  return transferLowIVPokemons(me, function (err) {
                     if (err) {
-                      console.log('DROP INV ERR: %s', err)
+                      console.log('Transfer ERR: %s', err)
                     }
                     var until = new Date().getTime() + 120 * 1000
                     huntPokestops(me, until)
-                    return
                   })
-                } else {
-                  if (argv.t) {
-                    transferLowIVPokemons(me, function (err) {
+                }
+                var numPokeball = 0
+                var numGreatball = 0
+                itemList.forEach(function (item) {
+                  if (item.item === 1) {
+                    numPokeball = nullToZero(item.count)
+                  } else if (item.item === 2) {
+                    numGreatball = nullToZero(item.count)
+                  }
+                })
+                console.log('POKE: %s, GREAT: %s', numPokeball, numGreatball)
+                if (numPokeball === 0 && numGreatball === 0) {
+                  var until = new Date().getTime() + 120 * 1000
+                  return huntPokestops(me, until)
+                }
+                if (pokeballFlag === 1) {
+                  if (pokeballType === 1 && numPokeball > 0 || pokeballType === 2 && numGreatball > 0) {
+                    if (argv.t) {
+                      return transferLowIVPokemons(me, function (err) {
+                        if (err) {
+                          console.log('TRNASFER ERR: %s', err)
+                        }
+                        cb()
+                      })
+                    }
+                  } else if (numPokeball === 0 && numGreatball > 0) {
+                    pokeballType = 2
+                    console.log('No more pokeballs, using great ball')
+                    return cb()
+                  } else if (numGreatball === 0 && numPokeball > 0) {
+                    pokeballType = 1
+                    console.log('No more greatballs, using pokeball')
+                    return cb()
+                  }
+                } else if (pokeballFlag === 2) {
+                  if (numGreatball === 0) {
+                    dropInventoryItems(me, function (err) {
                       if (err) {
-                        console.log('TRNASFER ERR: %s', err)
+                        console.log('DROP INV ERR: %s', err)
                       }
-                      cb()
+                      var until = new Date().getTime() + 120 * 1000
+                      return huntPokestops(me, until)
                     })
-                    return
+                  } else {
+                    if (argv.t) {
+                      return transferLowIVPokemons(me, function (err) {
+                        if (err) {
+                          console.log('TRNASFER ERR: %s', err)
+                        }
+                        cb()
+                      })
+                    }
                   }
                 }
-              }
-            })
+              })
+            } else {
+              return cb()
+            }
           }
-          // var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch']
-          // console.log(status[xdat.Status])
-          cb()
         })
       })
     } else {
@@ -368,7 +381,11 @@ function spinPokestop(pokestop, me, cb) {
     }
     if (response.result === 4) {
       dropInventoryItems(me, function (err, dropped) {
-        cb(null, dropped)
+        if (dropped === 0) {
+          cb(null, true)
+        } else {
+          cb(null, false)
+        }
       })
       return
     }
@@ -383,7 +400,7 @@ function spinPokestop(pokestop, me, cb) {
         console.log('Get one Master Ball')
       }
     })
-    cb()
+    cb(null, false)
   })
 }
 
@@ -571,7 +588,8 @@ function dropItems (me, list, dropped, cb) {
     } else {
       dropItems(me, list, dropped, cb)
     }
-  } else {
+  }
+  if (item === undefined && list.length === 0) {
     cb(null, dropped)
   }
 }
