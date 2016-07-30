@@ -1,30 +1,23 @@
-'use strict'
+import PokemonGO from 'pokemon-go-node-api'
+import minimist from 'minimist'
+import Promise from 'bluebird'
+import request from 'request'
+import fs from 'fs'
+import getLocation from './utils/getLocation'
+import promisifyTrainer from './utils/promisifyTrainer'
 
-var PokemonGO = require('pokemon-go-node-api')
-var request = require('request')
-var sleep = require('sleep')
-var fs = require('fs')
-var nodeGeocoder = require('node-geocoder')
-var minimist = require('minimist')
+var trainer = new PokemonGO.Pokeio()
 
-// using var so you can login with multiple users
-var a = new PokemonGO.Pokeio()
-//Set environment variables or replace placeholder text
-var location = {
-    type: 'coords',
-    coords: {}
-}
+const contents = fs.readFileSync("credentials.json")
+const credentials = JSON.parse(contents)
 
-var contents = fs.readFileSync("credentials.json")
-var credentials = JSON.parse(contents)
-
-var username = credentials.username
-var password = credentials.password
-var provider = credentials.provider
-var walkingSpeed = 0.01
-var caught = {}
-var fortTime = {}
-var pokemonFilter = {
+const username = credentials.username
+const password = credentials.password
+const provider = credentials.provider
+const walkingSpeed = 0.01
+let caught = {}
+let fortTime = {}
+let pokemonFilter = {
   1: true,
   2: true,
   3: true,
@@ -64,64 +57,40 @@ var pokemonFilter = {
   149: true
 }
 
-var argv = minimist(process.argv.slice(2))
-var pokeballType = argv.b || 1
-var pokeballFlag = argv.b || 1
-var ballNames = ["Poke Ball", "Great Ball", "Ultra ball"]
-console.log("Using %s", ballNames[pokeballType - 1])
-
+const argv = minimist(process.argv.slice(2))
 if (typeof(argv.l) !== "string") {
   console.log("Location must be provided after -l flag")
   process.exit(1)
 }
-var locationString = argv.l
-getLocation(locationString, function(err, result) {
-  if (err) {
-    console.log(err)
-  }
 
-  location.coords.latitude = result.latitude
-  location.coords.longitude = result.longitude
+const ballNames = ["Poke Ball", "Great Ball", "Ultra ball"]
+const pokeballFlag = argv.b || 1
+let pokeballType = argv.b || 1
+console.log("Using %s", ballNames[pokeballType - 1])
 
-  a.init(username, password, location, provider, function(err) {
-    if (err) throw err
+const locationString = argv.l
+trainer = promisifyTrainer(trainer)
+getLocation(locationString)
+  .then(packAPICoords, printErrAndExit)
+  .then((location) => trainer.initAsync(username, password, location, provider))
+  .then(() => trainer.GetProfileAsync())
+  .then(() => trainer.HeartbeatAsync)
+  .then(() => sisyphean(trainer))
 
-    console.log('1[i] Current location: ' + a.playerInfo.locationName)
-    console.log('1[i] lat/long/alt: : ' + a.playerInfo.latitude + ' ' + a.playerInfo.longitude + ' ' + a.playerInfo.altitude)
-
-    a.GetProfile(function(err, profile) {
-      if (err) throw err
-
-      console.log('1[i] Username: ' + profile.username)
-      console.log('1[i] Poke Storage: ' + profile.poke_storage)
-      console.log('1[i] Item Storage: ' + profile.item_storage)
-
-      var poke = 0
-      if (profile.currency[0].amount) {
-          poke = profile.currency[0].amount
+function packAPICoords ({ latitude, longitude }) {
+  return {
+      type: 'coords',
+      coords: {
+        latitude: latitude,
+        longitude: longitude
       }
+  }
+}
 
-      console.log('1[i] Pokecoin: ' + poke)
-      console.log('1[i] Stardust: ' + profile.currency[1].amount)
-
-      a.Heartbeat(function(err,hb) {
-        callMyself(a)()
-        // var until = new Date().getTime() + 300 * 1000
-        // huntPokestops(a, until)
-        // dropInventoryItems(a, function (err, num) {
-        //   console.log(num)
-        // })
-
-        // transferLowIVPokemons(a, function(err) {
-        //   if (err) {
-        //     console.log(err)
-        //   }
-        //   console.log('hello')
-        // })
-      })
-    })
-  })
-})
+function printErrAndExit (err) {
+  console.err(err)
+  process.exit(1)
+}
 
 function getPokestops (cb) {
   request('http://localhost:5000/raw_data?pokestops=true', function(err, response, body) {
@@ -147,19 +116,19 @@ function _huntPokestops (pokestops, me, until) {
   var target = nextTarget(pokestops, me)
   if (target === undefined) {
     var now = new Date().getTime()
-    setTimeout(callMyself(me), until - now)
+    setTimeout(() => sisyphean(me), until - now)
   } else {
     walkAndSpinPokestop(target, me, function(err, shouldRest) {
       var now = new Date().getTime()
       if (shouldRest) {
-        setTimeout(callMyself(me), until - now)
+        setTimeout(() => sisyphean(me), until - now)
         return
       }
       if (now < until) {
         console.log('Continue hunting pokestops, %s seconds remaining', (until - now) / 1000)
         _huntPokestops(pokestops, me, until)
       } else {
-        callMyself(me)()
+        sisyphean(me)
       }
     })
   }
@@ -282,19 +251,9 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
           if (xdat) {
             if (xdat.Status === null) {
               // No more balls or pokemon storage is full
-              // If no pokeball, switch to great ball
-              // If all no.... drop items and huntpokestops
-              // If has ball, pokemon storage is full, transfer low IV pokemons if -t is provided as arg
               getItemList(me, function (err, itemList) {
                 if (err) {
                   console.log(err)
-                  return transferLowIVPokemons(me, function (err) {
-                    if (err) {
-                      console.log('Transfer ERR: %s', err)
-                    }
-                    var until = new Date().getTime() + 120 * 1000
-                    huntPokestops(me, until)
-                  })
                 }
                 var numPokeball = 0
                 var numGreatball = 0
@@ -424,42 +383,28 @@ function moveTowardsTarget(latitude, longitude, me) {
   }
 }
 
-function callMyself (me) {
-  return function () {
-    getTargets(function (err, targets) {
-      var target = nextTarget(targets, me)
-      if (typeof target !== 'undefined') {
-        console.log('Found One, Preparing: %s', target.pokemon_id)
+function sisyphean (me) {
+  getTargets(function (err, targets) {
+    var target = nextTarget(targets, me)
+    if (typeof target !== 'undefined') {
+      console.log('Found One, Preparing: %s', target.pokemon_id)
 
-        var currentLocation = {
-            type: 'coords',
-            coords: {
-              latitude: me.playerInfo.latitude,
-              longitude: me.playerInfo.longitude
-            }
-        }
-        me.init(username, password, currentLocation, provider, function(err) {
-          if (err) throw err
-
-          me.GetProfile(function(err, profile) {
-            me.Heartbeat(function(err,hb) {})
-            console.log('Start walking')
-
-            walkAndCatch(target, me, function() {
-              me.Heartbeat(function(err,hb) {
-                console.log('ok')
-                callMyself(me)()
-              })
-            })
-          })
-        })
-      } else {
-        console.log('NO MORE, start hunting pokestops')
-        var until = new Date().getTime() + 120 * 1000
-        huntPokestops(me, until)
+      var currentLocation = {
+          type: 'coords',
+          coords: {
+            latitude: me.playerInfo.latitude,
+            longitude: me.playerInfo.longitude
+          }
       }
-    })
-  }
+      walkAndCatch(target, me, function () {
+        setTimeout(() => sisyphean(me), 1000)
+      })
+    } else {
+      console.log('NO MORE, start hunting pokestops')
+      var until = new Date().getTime() + 120 * 1000
+      huntPokestops(me, until)
+    }
+  })
 }
 
 // Helper functions
@@ -484,44 +429,13 @@ function deg2rad(deg) {
   return deg * (Math.PI/180)
 }
 
-function getLocation(locationString, cb) {
-  var isCoord = /^(\-?\d+\.\d+)?,\s*(\-?\d+\.\d+?)$/.test(locationString)
-
-  if (isCoord) {
-    var coords = locationString.split(',')
-    var result = {
-      latitude: parseFloat(coords[0]),
-      longitude: parseFloat(coords[1]),
-      altitude: 0
-    }
-
-    cb(null, result)
-  } else {
-    const options = {
-      provider: 'google'
-    }
-
-    const geocoder = nodeGeocoder(options)
-
-    geocoder.geocode(locationString, (err, res) => {
-      if (err) {
-        cb(err, null)
-      }
-      const result = {
-        latitude: res[0].latitude,
-        longitude: res[0].longitude,
-        altitude: 0
-      }
-
-      cb(null, result)
-    })
-  }
-}
-
 function getItemList (me, cb) {
   me.GetInventory(function (err, inv) {
     if (err) {
       cb(err, null)
+    }
+    if (inv === undefined) {
+      cb("No result")
     }
     var itemList = inv.inventory_delta.inventory_items.filter(function (element) {
       var item = element.inventory_item_data.item
