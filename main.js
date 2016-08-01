@@ -366,7 +366,7 @@ function spinPokestop(pokestop, me, cb) {
 function walkAndCatch(target, me, cb) {
   console.log('Target location: %s, %s', target.latitude, target.longitude)
   walkToTarget(target.latitude, target.longitude, me, function() {
-    catchPokemonsAtCurrentLocation(target, me, cb)
+    setTimeout(() => catchPokemonsAtCurrentLocation(target, me, cb), 5000)
   })
 }
 
