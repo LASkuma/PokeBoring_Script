@@ -45,6 +45,7 @@ let pokemonFilter = {
   94: true,
   102: true,
   103: true,
+  113: true,
   131: true,
   137: true,
   138: true,
@@ -215,29 +216,15 @@ function walkToTarget(latitude, longitude, me, cb) {
 
 function catchPokemonsAtCurrentLocation (target, me, cb) {
   me.Heartbeat(function(err,hb) {
-    if(err !== null) {
-      console.log('There appeared to be an error...')
+    if(err) {
+      console.log(err)
     }
-    var found = false
-    var currentPokemon
-    for (var i = hb.cells.length - 1; i >= 0; i--) {
-      if(hb.cells[i].WildPokemon[0]) {
-        for (var x = hb.cells[i].WildPokemon.length - 1; x >= 0; x--) {
-          currentPokemon = hb.cells[i].WildPokemon[x]
-          var pokeid = parseInt(currentPokemon.pokemon.PokemonId)
-          console.log("Nearby is %s", pokeid)
-          // Filter here, modify it
-          if (pokemonFilter[pokeid] !== undefined) {
-            found = true
-            break;
-          }
-        }
-      }
-      if (found) {
-        break;
-      }
-    }
-    if (found) {
+
+    const currentPokemon = getTargetPokemon(hb)
+    if (currentPokemon) {
+      const { EncounterId } = currentPokemon
+      const base64 = Buffer.from(EncounterId.toString()).toString('base64')
+
       var iPokedex = me.pokemonlist[parseInt(currentPokemon.pokemon.PokemonId)-1]
       me.EncounterPokemon(currentPokemon, function(suc, dat) {
         console.log('Encountering pokemon ' + iPokedex.name + '...')
@@ -303,12 +290,15 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
                         if (err) {
                           console.log('TRNASFER ERR: %s', err)
                         }
-                        cb()
+                        return cb()
                       })
                     }
                   }
                 }
               })
+            } else if (xdat.Status === 1 || xdat.Status === 3) {
+              caught[base64] = true
+              return cb()
             } else {
               return cb()
             }
@@ -321,6 +311,22 @@ function catchPokemonsAtCurrentLocation (target, me, cb) {
     }
     // console.log(util.inspect(hb, showHidden=false, depth=10, colorize=true))
   })
+}
+
+function getTargetPokemon (hb) {
+  for (var i = hb.cells.length - 1; i >= 0; i--) {
+    if(hb.cells[i].WildPokemon[0]) {
+      for (var x = hb.cells[i].WildPokemon.length - 1; x >= 0; x--) {
+        const currentPokemon = hb.cells[i].WildPokemon[x]
+        var pokeid = parseInt(currentPokemon.pokemon.PokemonId)
+        console.log("Nearby is %s", pokeid)
+        if (pokemonFilter[pokeid] !== undefined) {
+          return currentPokemon
+        }
+      }
+    }
+  }
+  return undefined
 }
 
 function walkAndSpinPokestop(pokestop, me, cb) {
